@@ -1,5 +1,6 @@
 use serde::Serialize;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use std::thread;
 
 #[derive(Serialize)]
@@ -12,6 +13,7 @@ struct WaybarOutput {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let modo_waybar = args.iter().any(|arg| arg == "--waybar");
+    let modo_rofi = args.iter().any(|arg| arg == "--rofi");
 
     let pacman_thread = thread::spawn(|| {
         Command::new("checkupdates").output()
@@ -40,6 +42,13 @@ fn main() {
     if total == 0 {
         if modo_waybar {
             imprimir_waybar(0, "Sistema actualizado", "updated");
+        } else if modo_rofi {
+            Command::new("notify-send")
+                .args(["-u", "low", "Actualizaciones", "El sistema ya está al día."])
+                .spawn()
+                .unwrap();
+        } else {
+            println!("✅ Sistema completamente actualizado (0 paquetes).");
         }
         return;
     }
@@ -81,6 +90,45 @@ fn main() {
         };
 
         imprimir_waybar(total, &tooltip.trim(), clase);
+    }
+    else if modo_rofi {
+        let mut opciones = String::new();
+        for c in &criticos { opciones.push_str(&format!("{}\n", c)); }
+        for e in &entorno { opciones.push_str(&format!("{}\n", e)); }
+        for n in &normales { opciones.push_str(&format!("{}\n", n)); }
+
+        let mut child = Command::new("rofi")
+            .args(["-dmenu", "-i", "-p", "🔄 Actualizar", "-no-custom"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Fallo al ejecutar rofi");
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(opciones.as_bytes()).expect("Fallo al escribir en rofi");
+        }
+
+        let output = child.wait_with_output().expect("Fallo al leer rofi");
+        let seleccion = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        if !seleccion.is_empty() {
+            let partes: Vec<&str> = seleccion.split_whitespace().collect();
+            let mut nombre_paquete = "";
+            
+            for p in partes {
+                if !p.starts_with('[') && p != "🔴" && p != "🟡" && p != "📦" {
+                    nombre_paquete = p;
+                    break;
+                }
+            }
+
+            if !nombre_paquete.is_empty() {
+                Command::new("kitty")
+                    .args(["--class", "update-term", "-e", "paru", "-S", nombre_paquete])
+                    .spawn()
+                    .expect("Fallo al lanzar kitty");
+            }
+        }
     } else {
         for c in criticos { println!("{}", c); }
         for e in entorno { println!("{}", e); }
