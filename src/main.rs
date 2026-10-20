@@ -145,10 +145,10 @@ fn procesar_salida(texto: &str) -> Vec<String> {
 
 fn imprimir_waybar(cantidad: usize, tooltip: &str, clase: &str) {
     let icon = match clase {
-        "critical" => "🚨",
-        "warning" => "⚠️",
-        "updated" => "✔️",
-        _ => "📦",
+        "critical" => "",
+        "warning" => "",
+        "updated" => "✔",
+        _ => "󰏗",
     };
 
     let text = if cantidad > 0 { format!("{} {}", icon, cantidad) } else { "".to_string() };
